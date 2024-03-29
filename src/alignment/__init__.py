@@ -11,3 +11,6 @@ from .model_utils import (
     get_tokenizer,
     is_adapter_model,
 )
+from .trainer import (
+    RewardTrainer,
+)

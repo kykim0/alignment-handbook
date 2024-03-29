@@ -9,6 +9,7 @@ from alignment import (
     DataArguments,
     H4ArgumentParser,
     ModelArguments,
+    RewardTrainer,
     RMConfig,
     apply_chat_template,
     get_datasets,
@@ -20,7 +21,6 @@ from alignment import (
 import torch
 import transformers
 from transformers import AutoModelForSequenceClassification, set_seed
-from trl import RewardTrainer
 
 logger = logging.getLogger(__name__)
 
