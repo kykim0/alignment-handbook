@@ -20,6 +20,7 @@ from typing import Any, Dict, List, NewType, Optional, Tuple
 
 import transformers
 from transformers import MODEL_FOR_CAUSAL_LM_MAPPING, HfArgumentParser
+import trl
 
 
 MODEL_CONFIG_CLASSES = list(MODEL_FOR_CAUSAL_LM_MAPPING.keys())
@@ -281,3 +282,13 @@ class DPOConfig(transformers.TrainingArguments):
     optim: Optional[str] = field(default="rmsprop")
     remove_unused_columns: bool = field(default=False)
     loss_type: Optional[str] = field(default="sigmoid", metadata={"help": ("The loss type for DPO.")})
+
+
+@dataclass
+class RMConfig(trl.RewardConfig):
+    """
+    Arguments related to reward modeling. Extends trl.RewardConfig.
+    """
+
+    bt_beta: float = field(default=None)
+    """Rationality constant in the Bradley-Terry model."""
