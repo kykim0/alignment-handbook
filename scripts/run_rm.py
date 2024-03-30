@@ -9,9 +9,11 @@ from alignment import (
     DataArguments,
     H4ArgumentParser,
     ModelArguments,
+    RewardDataCollatorWithPadding,
     RewardTrainer,
     RMConfig,
     apply_chat_template,
+    compute_accuracy,
     get_datasets,
     get_kbit_device_map,
     get_peft_config,
@@ -62,6 +64,7 @@ def main():
         f"s{max(0, training_args.max_steps)}",
         f"e{training_args.num_train_epochs}",
         f"btb{training_args.bt_beta or 'inf'}",
+        f"seed{training_args.seed}",
     ])
     if "wandb" in training_args.report_to:
         training_args.tracker_kwargs = {"wandb": {"name": run_name}}
@@ -178,10 +181,12 @@ def main():
     #########################
     trainer = RewardTrainer(
         model=model,
-        tokenizer=tokenizer,
         args=training_args,
+        data_collator=RewardDataCollatorWithPadding(tokenizer, max_length=training_args.max_length),
         train_dataset=train_dataset,
         eval_dataset=eval_dataset,
+        tokenizer=tokenizer,
+        compute_metrics=compute_accuracy,
         peft_config=get_peft_config(model_args),
     )
     trainer.train(training_args.resume_from_checkpoint)

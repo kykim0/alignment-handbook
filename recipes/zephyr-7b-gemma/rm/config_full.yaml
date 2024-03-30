@@ -31,7 +31,7 @@ logging_steps: 10
 logging_strategy: steps
 max_length: 1024
 max_steps: -1
-num_train_epochs: 2
+num_train_epochs: 3
 run_name: capo-rm
 output_dir: save/g2b-uf-capo-rm
 bt_beta: null
@@ -42,7 +42,7 @@ per_device_train_batch_size: 1
 push_to_hub: false
 hub_model_id: null
 hub_strategy: every_save
-remove_unused_columns: true
+remove_unused_columns: false
 report_to:
 - wandb
 hub_token: null

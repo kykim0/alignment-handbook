@@ -12,5 +12,7 @@ from .model_utils import (
     is_adapter_model,
 )
 from .trainer import (
+    RewardDataCollatorWithPadding,
     RewardTrainer,
+    compute_accuracy,
 )
