@@ -283,6 +283,13 @@ class DPOConfig(transformers.TrainingArguments):
     remove_unused_columns: bool = field(default=False)
     loss_type: Optional[str] = field(default="sigmoid", metadata={"help": ("The loss type for DPO.")})
 
+    bt_beta: float = field(default=None)
+    """Rationality constant in the Bradley-Terry model."""
+    soft_label_json: str = field(default=None)
+    """Path to a json containing soft labels."""
+    filter_threshold: float = field(default=None)
+    """If set, filter pairs whose differences are less than or equal to this threshold."""
+
 
 @dataclass
 class RMConfig(trl.RewardConfig):
@@ -292,3 +299,9 @@ class RMConfig(trl.RewardConfig):
 
     bt_beta: float = field(default=None)
     """Rationality constant in the Bradley-Terry model."""
+    soft_label_json: str = field(default=None)
+    """Path to a json containing soft labels."""
+    rescale_p: bool = field(default=False)
+    """True to rescale the chosen prob instead of switching the chosen and rejected responses."""
+    filter_threshold: float = field(default=None)
+    """If set, filter pairs whose differences are less than or equal to this threshold."""

@@ -14,7 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import logging
-import random
+import math
+import os
 import sys
 
 import torch
@@ -24,6 +25,7 @@ from transformers import AutoModelForCausalLM, set_seed
 from alignment import (
     DataArguments,
     DPOConfig,
+    DPOTrainer,
     H4ArgumentParser,
     ModelArguments,
     apply_chat_template,
@@ -37,7 +39,6 @@ from alignment import (
     is_adapter_model,
 )
 from peft import PeftConfig, PeftModel
-from trl import DPOTrainer
 
 
 logger = logging.getLogger(__name__)
@@ -46,6 +47,7 @@ logger = logging.getLogger(__name__)
 def main():
     parser = H4ArgumentParser((ModelArguments, DataArguments, DPOConfig))
     model_args, data_args, training_args = parser.parse()
+    os.environ["WANDB_PROJECT"] = training_args.run_name
 
     #######
     # Setup
@@ -66,6 +68,28 @@ def main():
     logger.info(f"Data parameters {data_args}")
     logger.info(f"Training/evaluation parameters {training_args}")
 
+    num_gpus = torch.cuda.device_count()
+    per_device_batch = training_args.per_device_train_batch_size
+    grad_accum_steps = training_args.gradient_accumulation_steps
+    batch_size = num_gpus * per_device_batch * grad_accum_steps
+    if training_args.filter_threshold and training_args.filter_threshold < 0.0:
+        training_args.filter_threshold = None
+    run_name = "-".join([
+        f"b{batch_size}",
+        f"lr{training_args.learning_rate}",
+        f"e{training_args.num_train_epochs}",
+        f"btb{training_args.bt_beta or 'inf'}",
+        f"ft{training_args.filter_threshold if training_args.filter_threshold is not None else 'n'}",
+        f"seed{training_args.seed}",
+    ])
+    if "wandb" in training_args.report_to:
+        training_args.tracker_kwargs = {"wandb": {"name": run_name}}
+    training_args.run_name = run_name
+    training_args.output_dir = os.path.join(
+        training_args.output_dir,
+        training_args.run_name,
+    )
+
     # Check for last checkpoint
     last_checkpoint = get_checkpoint(training_args)
     if last_checkpoint is not None and training_args.resume_from_checkpoint is None:
@@ -81,12 +105,12 @@ def main():
         data_args,
         splits=data_args.dataset_splits,
         configs=data_args.dataset_configs,
-        columns_to_keep=["messages", "chosen", "rejected", "prompt", "completion", "label"],
+        columns_to_keep=["messages", "chosen", "rejected", "prompt", "completion", "label", "prompt_id", "score_chosen", "score_rejected", "source"],
     )
     logger.info(
         f"Training on the following splits: {[split + ' : ' + str(dset.num_rows) for split, dset in raw_datasets.items()]}"
     )
-    column_names = list(raw_datasets["train"].features)
+    column_names = list(fn for fn in raw_datasets["train"].features if fn not in ["prompt_id", "score_chosen", "score_rejected", "source"])
 
     #####################################
     # Load tokenizer and process datasets
@@ -107,6 +131,39 @@ def main():
         num_proc=data_args.preprocessing_num_workers,
         remove_columns=column_names,
         desc="Formatting comparisons with prompt template",
+    )
+
+    soft_label_dict = {}
+    if training_args.soft_label_json:
+        import json
+        with open(training_args.soft_label_json, "r") as f:
+            for d in json.load(f):
+                soft_label_dict[d["prompt_id"]] = d
+
+    def preprocess_function(example):
+        prompt_id = example["prompt_id"]
+        chosen_text, rejected_text = example["text_chosen"], example["text_rejected"]
+        score_chosen, score_rejected = example["score_chosen"], example["score_rejected"]
+
+        # Assume p follows the Bradley-Terry model.
+        p_chosen = 1.0
+        if training_args.bt_beta:
+            score_diff = score_chosen - score_rejected
+            p_chosen = 1.0 / (1.0 + math.exp(-training_args.bt_beta * score_diff))
+        if soft_label_dict and prompt_id in soft_label_dict:
+            p_chosen = soft_label_dict[prompt_id]["p_chosen"]
+            if p_chosen < 0.5:
+                p_chosen = 1.0 - p_chosen
+                chosen_text, rejected_text = rejected_text, chosen_text
+
+        example["text_chosen"] = chosen_text
+        example["text_rejected"] = rejected_text
+        example["p_chosen"] = p_chosen
+        return example
+
+    raw_datasets = raw_datasets.map(
+        preprocess_function,
+        num_proc=data_args.preprocessing_num_workers,
     )
 
     ##########################
@@ -133,10 +190,10 @@ def main():
         )
 
     # Log a few random samples from the training set:
-    for index in random.sample(range(len(raw_datasets["train"])), 3):
-        logger.info(f"Prompt sample {index} of the raw training set:\n\n{raw_datasets['train'][index]['prompt']}")
-        logger.info(f"Chosen sample {index} of the raw training set:\n\n{raw_datasets['train'][index]['chosen']}")
-        logger.info(f"Rejected sample {index} of the raw training set:\n\n{raw_datasets['train'][index]['rejected']}")
+    # for index in random.sample(range(len(raw_datasets["train"])), 3):
+    #     logger.info(f"Prompt sample {index} of the raw training set:\n\n{raw_datasets['train'][index]['prompt']}")
+    #     logger.info(f"Chosen sample {index} of the raw training set:\n\n{raw_datasets['train'][index]['chosen']}")
+    #     logger.info(f"Rejected sample {index} of the raw training set:\n\n{raw_datasets['train'][index]['rejected']}")
 
     torch_dtype = (
         model_args.torch_dtype if model_args.torch_dtype in ["auto", None] else getattr(torch, model_args.torch_dtype)
