@@ -1,10 +1,12 @@
 #!/bin/bash
 #SBATCH --ntasks-per-node=1
 #SBATCH --exclusive
-#SBATCH --gres=gpu:8
-#SBATCH --partition=hopper-prod  # Adjust this for your cluster
-#SBATCH --output=/fsx/h4/logs/%x-%j.out # Adjust this for your cluster
-#SBATCH --err=/fsx/h4/logs/%x-%j.err    # Adjust this for your cluster
+#SBATCH --time=24:00:00
+#SBATCH --nodes=1
+#SBATCH --gpus-per-node=4
+#SBATCH --partition=compute  # Adjust this for your cluster
+#SBATCH --output=/data/kyuyoung_kim/dev/logs/%x-%j.out # Adjust this for your cluster
+#SBATCH --err=/data/kyuyoung_kim/dev/logs/%x-%j.err    # Adjust this for your cluster
 
 set -x -e
 
@@ -20,7 +22,7 @@ OPTIONAL_ARGS=$5
 
 # Training setup
 NUM_NODES=$SLURM_NNODES
-GPUS_PER_NODE=8
+GPUS_PER_NODE=4
 WORLD_SIZE=$(($NUM_NODES*$GPUS_PER_NODE))
 # Due to conflicts between Accelerate's DeepSpeed configs and Transformers' TrainingArguments, we need to parse the gradient accumulation steps from the config file to ensure they match
 CONFIG_FILE=recipes/$MODEL/$TASK/config_$PRECISION.yaml
