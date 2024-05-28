@@ -78,6 +78,7 @@ def main():
         f"b{batch_size}",
         f"lr{training_args.learning_rate}",
         f"e{training_args.num_train_epochs}",
+        f"b{training_args.beta}",
         f"btb{training_args.bt_beta or 'inf'}",
         f"ft{training_args.filter_threshold if training_args.filter_threshold is not None else 'n'}",
         f"seed{training_args.seed}",
@@ -105,12 +106,17 @@ def main():
         data_args,
         splits=data_args.dataset_splits,
         configs=data_args.dataset_configs,
-        columns_to_keep=["messages", "chosen", "rejected", "prompt", "completion", "label", "prompt_id", "score_chosen", "score_rejected", "source"],
+        columns_to_keep=["messages", "chosen", "rejected", "prompt", "completion",
+                         "label", "prompt_id", "score_chosen", "score_rejected", "source",
+                         "chosen_rating", "rejected_rating"],
     )
     logger.info(
         f"Training on the following splits: {[split + ' : ' + str(dset.num_rows) for split, dset in raw_datasets.items()]}"
     )
-    column_names = list(fn for fn in raw_datasets["train"].features if fn not in ["prompt_id", "score_chosen", "score_rejected", "source"])
+    column_names = list(
+        fn for fn in raw_datasets["train"].features
+        if fn not in ["prompt_id", "score_chosen", "score_rejected", "source", "chosen_rating", "rejected_rating"]
+    )
 
     #####################################
     # Load tokenizer and process datasets
@@ -141,9 +147,12 @@ def main():
                 soft_label_dict[d["prompt_id"]] = d
 
     def preprocess_function(example):
-        prompt_id = example["prompt_id"]
+        prompt_id = example.get("prompt_id", None)
         chosen_text, rejected_text = example["text_chosen"], example["text_rejected"]
-        score_chosen, score_rejected = example["score_chosen"], example["score_rejected"]
+        if "score_chosen" in example and "score_rejected" in example:
+            score_chosen, score_rejected = example["score_chosen"], example["score_rejected"]
+        elif "chosen_rating" in example and "rejected_rating" in example:
+            score_chosen, score_rejected = example["chosen_rating"], example["rejected_rating"]
 
         # Assume p follows the Bradley-Terry model.
         p_chosen = 1.0
@@ -251,6 +260,7 @@ def main():
         ref_model_init_kwargs=ref_model_kwargs,
         args=training_args,
         beta=training_args.beta,
+        label_smoothing=training_args.label_smoothing,
         train_dataset=raw_datasets["train"],
         eval_dataset=raw_datasets["test"],
         tokenizer=tokenizer,
