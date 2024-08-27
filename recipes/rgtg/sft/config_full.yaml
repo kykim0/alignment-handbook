@@ -1,0 +1,52 @@
+# See https://huggingface.co/allenai/OLMo-7B-SFT-hf
+
+# Model arguments
+# model_name_or_path: mistralai/Mistral-7B-v0.1
+model_name_or_path: allenai/OLMo-1B-hf
+model_revision: main
+torch_dtype: bfloat16
+use_flash_attention_2: true
+
+# Data training arguments
+# chat_template: "{% for message in messages %}\n{% if message['role'] == 'user' %}\n{{ '<|user|>\n' + message['content'] + eos_token }}\n{% elif message['role'] == 'system' %}\n{{ '<|system|>\n' + message['content'] + eos_token }}\n{% elif message['role'] == 'assistant' %}\n{{ '<|assistant|>\n'  + message['content'] + eos_token }}\n{% endif %}\n{% if loop.last and add_generation_prompt %}\n{{ '<|assistant|>' }}\n{% endif %}\n{% endfor %}"
+chat_template: "{{ eos_token }}{% for message in messages %}\n{% if message['role'] == 'user' %}\n{{ '<|user|>\n' + message['content'] }}\n{% elif message['role'] == 'assistant' %}\n{{ '<|assistant|>\n'  + message['content'] + eos_token }}\n{% endif %}\n{% if loop.last and add_generation_prompt %}\n{{ '<|assistant|>' }}\n{% endif %}\n{% endfor %}"
+dataset_mixer:
+  # HuggingFaceH4/ultrachat_200k: 1.0
+  allenai/tulu-v2-sft-mixture: 1.0
+dataset_splits:
+- train
+# - test_sft
+preprocessing_num_workers: 12
+
+# SFT trainer config (4 GPUs assumed)
+bf16: true
+do_eval: true
+evaluation_strategy: epoch
+gradient_accumulation_steps: 16
+gradient_checkpointing: true
+gradient_checkpointing_kwargs:
+  use_reentrant: False
+hub_model_id: sft-olmo-1b
+hub_strategy: every_save
+learning_rate: 2.0e-05
+log_level: info
+logging_steps: 10
+logging_strategy: steps
+lr_scheduler_type: cosine
+max_seq_length: 2048
+max_steps: -1
+num_train_epochs: 3
+run_name: sft-olmo-1b
+output_dir: save/sft-olmo-1b
+overwrite_output_dir: true
+per_device_eval_batch_size: 2
+per_device_train_batch_size: 8
+push_to_hub: true
+remove_unused_columns: true
+report_to:
+- wandb
+save_strategy: epoch
+save_steps: 100
+save_total_limit: null
+seed: 42
+warmup_ratio: 0.03  # 0.1
